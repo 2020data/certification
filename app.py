@@ -19,7 +19,6 @@ FONT_PATH = "wt064.ttf" #"NotoSansTC-Regular.ttf"
 # ==========================================
 
 def generate_cert(bg_image, course_name, student_name, date_str, hours_str, y_pos, colors, is_qualified=True):
-    # (此段程式碼與之前完全相同，為節省版面先省略，請保留你原本的 generate_cert 函數)
     img = bg_image.copy()
     draw = ImageDraw.Draw(img)
     
@@ -70,34 +69,47 @@ def generate_cert(bg_image, course_name, student_name, date_str, hours_str, y_po
 
     return img
 
+# 輔助函式：載入背景圖片 (優先使用上傳的圖片，否則抓預設路徑，最後用白底)
+def load_background(uploaded_file, default_path):
+    if uploaded_file:
+        try:
+            return Image.open(uploaded_file).convert("RGB")
+        except UnidentifiedImageError:
+            st.sidebar.error("上傳的檔案非有效圖片格式。")
+    if os.path.exists(default_path):
+        try:
+            return Image.open(default_path).convert("RGB")
+        except UnidentifiedImageError:
+            st.sidebar.error(f"檔案 {default_path} 損毀或格式錯誤。")
+    
+    # 防呆機制：如果都沒有，給一張全白背景
+    return Image.new('RGB', (1600, 1200), color=(255, 255, 255))
+
 st.title("🎓 課程證明自助查詢與下載系統")
 
-# --- 側邊欄：背板設定 ---
+# --- 側邊欄：雙背板設定 ---
 st.sidebar.header("🖼️ 1. 背景圖片設定")
-bg_option = st.sidebar.radio("選擇背板來源", ["自行上傳背板", "預設背板 1", "預設背板 2", "預設背板 3"])
+st.sidebar.markdown("""
+系統已預設：
+- 符合資格 ➔ 使用 `bg1.png`
+- 不符合資格 ➔ 使用 `bg2.png`
 
-bg_image = None
-if bg_option == "自行上傳背板":
-    uploaded_bg = st.sidebar.file_uploader("上傳背板圖片 (PNG/JPG)", type=["png", "jpg", "jpeg"])
-    if uploaded_bg:
-        try:
-            bg_image = Image.open(uploaded_bg).convert("RGB")
-        except UnidentifiedImageError:
-            st.sidebar.error("上傳的檔案非有效圖片格式，請重新上傳。")
-else:
-    bg_dict = {"預設背板 1": "bg1.png", "預設背板 2": "bg2.png", "預設背板 3": "bg3.png"}
-    bg_path = bg_dict[bg_option]
-    if os.path.exists(bg_path):
-        try:
-            bg_image = Image.open(bg_path).convert("RGB")
-        except UnidentifiedImageError:
-            st.sidebar.error(f"檔案 {bg_path} 損毀或格式錯誤。")
-    else:
-        st.sidebar.warning(f"找不到 {bg_path}。請上傳圖片，或在專案資料夾放入該檔。")
+*(若需臨時更換，可於下方上傳覆蓋預設)*
+""")
 
-if bg_image is None:
-    bg_image = Image.new('RGB', (1600, 1200), color=(255, 255, 255))
-    st.sidebar.info("目前使用全白預設背景。")
+bg1_upload = st.sidebar.file_uploader("上傳「參加證明」背板", type=["png", "jpg", "jpeg"], key="bg1")
+bg2_upload = st.sidebar.file_uploader("上傳「完成證明」背板", type=["png", "jpg", "jpeg"], key="bg2")
+
+# 取得最終要使用的兩張背板
+bg1_image = load_background(bg1_upload, "bg1.png")
+bg2_image = load_background(bg2_upload, "bg2.png")
+
+# 檢查檔案是否遺失，提醒管理員
+if not bg1_upload and not os.path.exists("bg1.png"):
+    st.sidebar.warning("找不到 bg1.png，符合資格者將顯示全白背景。")
+if not bg2_upload and not os.path.exists("bg2.png"):
+    st.sidebar.warning("找不到 bg2.png，不符合資格者將顯示全白背景。")
+
 
 # --- 側邊欄：排版與顏色微調 ---
 st.sidebar.header("✍️ 2. 文字排版與顏色微調")
@@ -161,12 +173,16 @@ if GOOGLE_SHEET_CSV_URL:
                         s_date = str(row['上課日期']) if '上課日期' in df_db.columns and pd.notna(row['上課日期']) else "7/6~7/16"
                         s_hours = str(row['修習時數']) if '修習時數' in df_db.columns and pd.notna(row['修習時數']) else "共8小時"
                         
+                        # 核心變更：根據資格選擇要傳入的背板圖片
+                        selected_bg = bg1_image if is_qual else bg2_image
+                        
                         if is_qual:
                             st.success(f"✅ 驗證成功！{query_name} 您符合資格，為您核發「參加證明」。")
                         else:
                             st.info(f"✅ 驗證成功！{query_name} 為您核發「完成證明」。")
                             
-                        cert_img = generate_cert(bg_image, s_course, query_name, s_date, s_hours, y_pos, colors, is_qual)
+                        # 使用動態選擇的 selected_bg 來生成證明
+                        cert_img = generate_cert(selected_bg, s_course, query_name, s_date, s_hours, y_pos, colors, is_qual)
                         st.image(cert_img, use_container_width=True)
                         
                         buf = io.BytesIO()

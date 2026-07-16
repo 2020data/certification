@@ -140,7 +140,7 @@ st.sidebar.markdown("""
 4. 點擊發佈並複製連結貼於下方。
 *(表單需包含：`姓名`, `帳號`, `符合資格`)*
 """)
-google_sheet_url = st.sidebar.text_input("貼上發佈的 CSV 連結")
+google_sheet_url = st.sidebar.text_input("https://docs.google.com/spreadsheets/d/e/2PACX-1vT5LzzeMZPvn99VlVtK0UvbZXE8INd5_rwLn7ZjLzQEcLKctgVa_vr02jJga3znNDePe14Bd6PMs_kp/pub?gid=0&single=true&output=csv")
 
 # --- 主畫面：學員自助查詢與下載 ---
 st.subheader("🔍 學員自助驗證與下載")

@@ -6,15 +6,20 @@ import os
 
 st.set_page_config(page_title="學員證明自助查詢系統", layout="wide")
 
+# ==========================================
+# 🛑 從 Streamlit Secrets 讀取隱藏的資料庫連結
+# ==========================================
+if "DB_URL" in st.secrets:
+    GOOGLE_SHEET_CSV_URL = st.secrets["DB_URL"]
+else:
+    GOOGLE_SHEET_CSV_URL = None
+
 # 設定中文字型路徑 (請確保資料夾內有此字型檔)
 FONT_PATH = "wt064.ttf" #"NotoSansTC-Regular.ttf"
+# ==========================================
 
 def generate_cert(bg_image, course_name, student_name, date_str, hours_str, y_pos, colors, is_qualified=True):
-    """
-    根據背景圖片、輸入資訊與排版設定生成證明
-    is_qualified=True: 參加證明 (顯示時數)
-    is_qualified=False: 完成證明 (不顯示時數，更改內文)
-    """
+    # (此段程式碼與之前完全相同，為節省版面先省略，請保留你原本的 generate_cert 函數)
     img = bg_image.copy()
     draw = ImageDraw.Draw(img)
     
@@ -28,27 +33,21 @@ def generate_cert(bg_image, course_name, student_name, date_str, hours_str, y_po
 
     W, H = img.size
 
-    # --- 文字寫入 (套用動態 Y 座標與顏色) ---
-    # 課程名稱
     course_text = f"課程名稱：{course_name}"
     _, _, w, h = draw.textbbox((0, 0), course_text, font=font_medium)
     draw.text(((W-w)/2, H * y_pos['course']), course_text, font=font_medium, fill=colors['course'])
 
-    # 茲證明
     certify_text = "茲證明"
     _, _, w, h = draw.textbbox((0, 0), certify_text, font=font_small)
     draw.text(((W-w)/2, H * y_pos['certify']), certify_text, font=font_small, fill=colors['text'])
 
-    # 學員姓名
     _, _, w, h = draw.textbbox((0, 0), student_name, font=font_large)
     draw.text(((W-w)/2, H * y_pos['name']), student_name, font=font_large, fill=colors['name'])
 
-    # 先生/女士
     title_text = "先生/女士"
     _, _, w, h = draw.textbbox((0, 0), title_text, font=font_small)
     draw.text(((W-w)/2, H * y_pos['title']), title_text, font=font_small, fill=colors['text'])
 
-    # 根據資格決定內文與是否顯示時數
     if is_qualified:
         desc_text = "參加上述課程並完成學習，特發此參加證明以資證明。"
         date_display = f"上課日期：{date_str}"
@@ -63,11 +62,9 @@ def generate_cert(bg_image, course_name, student_name, date_str, hours_str, y_po
         desc_text = "完成上述課程學習，特發此完成證明以資鼓勵。"
         date_display = f"上課日期：{date_str}"
         
-        # 不符合資格者，僅顯示日期，不顯示時數
         _, _, w1, h1 = draw.textbbox((0, 0), date_display, font=font_medium)
         draw.text(((W-w1)/2, H * y_pos['date']), date_display, font=font_medium, fill=colors['date_hours'])
 
-    # 參加/完成 說明內文
     _, _, w, h = draw.textbbox((0, 0), desc_text, font=font_medium)
     draw.text(((W-w)/2, H * y_pos['desc']), desc_text, font=font_medium, fill=colors['text'])
 
@@ -119,7 +116,7 @@ with st.sidebar.expander("展開微調面板 (調整座標與顏色)", expanded=
         'text': color_text, 'date_hours': color_date_hours
     }
 
-    st.markdown("**上下位置設定 (數值越大越靠下)**")
+    st.markdown("**上下位置設定**")
     y_pos = {
         'course': st.slider("課程名稱 Y 座標", 0.0, 1.0, 0.32, 0.01),
         'certify': st.slider("茲證明 Y 座標", 0.0, 1.0, 0.35, 0.01),
@@ -130,50 +127,33 @@ with st.sidebar.expander("展開微調面板 (調整座標與顏色)", expanded=
         'hours': st.slider("時數 Y 座標", 0.0, 1.0, 0.595, 0.01)
     }
 
-# --- 側邊欄：Google 表單資料庫 ---
-st.sidebar.header("🌐 3. 學員驗證資料庫 (Google表單)")
-st.sidebar.markdown("""
-**設定步驟：**
-1. 打開表單回應的 Google 試算表。
-2. 點擊 `檔案` > `共用` > `發佈到網路`。
-3. 選擇 `整份文件` 或 `表單回應 1`，格式選擇 **逗號分隔值 (.csv)**。
-4. 點擊發佈並複製連結貼於下方。
-*(表單需包含：`姓名`, `帳號`, `符合資格`)*
-""")
-google_sheet_url = st.sidebar.text_input("https://docs.google.com/spreadsheets/d/e/2PACX-1vT5LzzeMZPvn99VlVtK0UvbZXE8INd5_rwLn7ZjLzQEcLKctgVa_vr02jJga3znNDePe14Bd6PMs_kp/pub?gid=0&single=true&output=csv")
-
 # --- 主畫面：學員自助查詢與下載 ---
 st.subheader("🔍 學員自助驗證與下載")
 st.markdown("請輸入您的 **姓名** 與 **帳號** 進行驗證，系統將為您產生對應的證明。")
 
-if google_sheet_url:
+if GOOGLE_SHEET_CSV_URL:
     try:
-        # 讀取 CSV 連結
-        df_db = pd.read_csv(google_sheet_url)
+        df_db = pd.read_csv(GOOGLE_SHEET_CSV_URL)
         req_cols = ['姓名', '帳號', '符合資格']
         
-        # 檢查表單是否包含必要欄位
         if not all(col in df_db.columns for col in req_cols):
-            st.error(f"⚠️ Google 表單缺少必要欄位，請確保表單題目包含：{', '.join(req_cols)}")
+            st.error(f"⚠️ 系統錯誤：後台資料庫缺少必要欄位 ({', '.join(req_cols)})，請聯繫管理員。")
         else:
             col_q1, col_q2 = st.columns(2)
             with col_q1:
                 query_name = st.text_input("請輸入您的姓名")
             with col_q2:
-                query_account = st.text_input("請輸入您的帳號 (如學號或身分證字號)")
+                query_account = st.text_input("請輸入您的帳號 (如學號或身分證字號)", type="password")
             
             if st.button("驗證並查詢", type="primary"):
                 if not query_name or not query_account:
                     st.warning("請填寫姓名與帳號！")
                 else:
-                    # 尋找符合的資料，全部轉為字串比對
                     match = df_db[(df_db['姓名'].astype(str) == query_name) & (df_db['帳號'].astype(str) == query_account)]
                     
                     if not match.empty:
-                        # 抓取最新一筆 (防範有人重複填寫表單，預設取最後一筆)
                         row = match.iloc[-1]
                         
-                        # 判斷是否符合資格
                         qual_val = str(row['符合資格']).strip().upper()
                         is_qual = qual_val in ['是', 'Y', 'TRUE', '1', 'YES']
                         
@@ -199,8 +179,8 @@ if google_sheet_url:
                             mime="image/png"
                         )
                     else:
-                        st.error("❌ 查無資料，請確認您的「姓名」與「帳號」是否輸入正確，或確認表單已送出。")
+                        st.error("❌ 查無資料，請確認您的「姓名」與「帳號」是否輸入正確，或聯繫管理員確認報名狀態。")
     except Exception as e:
-        st.error(f"讀取 Google 表單資料失敗，請確認連結是否正確並已設定為「發佈為 CSV」。(錯誤訊息: {e})")
+        st.error("系統維護中：無法讀取後台資料庫，請稍後再試或聯繫管理員。")
 else:
-    st.info("💡 管理員尚未於側邊欄提供 Google 試算表 CSV 連結，暫時無法使用查詢功能。")
+    st.warning("⚠️ 系統尚未設定資料庫，無法使用查詢功能。(管理員請於後台設定 Secrets 變數 DB_URL)")
